@@ -57,14 +57,20 @@
         [(..? lst) (+ 1 (count (..-e2 lst)))] 
         [else (triggered (exception "count: wrong argument type"))]))
 
+(define (zip lst1 lst2) 
+    (cond 
+        [(and (list? lst1) (list? lst2)) (map cons lst1 lst2)]
+        [else (list (cons lst1 lst2))]))
+
 ;; FR interpreter funkcija.
 (define (fri expr env)
+    ;;(printf "Evaluating: ~a\nEnvironment: ~a\n" expr env)
     (cond
         [(int? expr) expr]                                                  ;; Ce je izraz eno samo stevilo, vrnemo stevilo.                              
         [(true? expr) expr]                                                 ;; Ce je izraz samo true, vrnemo true. 
         [(false? expr) expr]                                                ;; Ce je izraz samo false, vrnemo false.
         [(exception? expr) expr]                                            ;; Ce je izraz izjema, vrnemo izjemo.
-        [(triggered expr) expr]                                             ;; Ce je izraz prozena izjema, vrnemo prozeno izjemo.
+        [(triggered? expr) expr]                                             ;; Ce je izraz prozena izjema, vrnemo prozeno izjemo.
         [(empty? expr) expr]                                                ;; Ce je izraz prazen seznam, vrnemo prazen seznam.
         [(..? expr)                                                         ;; Ce je izraz sestavljen iz vecih izrazov jih evalviramo in vrnemo 
             (let ([e1 (fri (..-e1 expr) env)]                               ;; kot seznam, razen v primeru, ko je bila med evalvacijo prozena izjema.
@@ -258,18 +264,43 @@
                 )
             )
         ]
-        [(vars? expr)                                                     ;; Razsiri trenutno okolje z imenom spremenljivke 's', inicializiriano na prvi izraz in se
-            (let ([s (vars-s expr)]                                       ;; v razsirjenem okolju evalvira v drugem izrazu. Ce sta 's' in 'e1' seznama (Racket impl)
-                  [e1 (fri (vars-e1 expr) env)]                           ;; potem razsirimo okolje z vsemi spremenljivkami (delovanje let).
-                  [e2 (fri (vars-e1 expr) env)])                           
+        [(vars? expr)                                                    
+            (let* ([s-lst (if (list? (vars-s expr)) (vars-s expr) (list (vars-s expr)))]
+                  [e1-lst (if (list? (vars-e1 expr)) (map (lambda (exp) (fri exp env)) (vars-e1 expr)) (list (fri (vars-e1 expr) env)))]
+                  [env-lst (zip s-lst e1-lst)])
                 (cond
-                    [(triggered? e) e]
-                    [(not (holds? (fri (?seq e) env))) (triggered (exception "any: wrong argument type"))]
-                    [(empty? e) (false)]
-                    [(not (holds? (fri (?= (..-e1 e) (false)) env))) (true)]
-                    [(fri (?any (..-e2 e)) env)]
+                    [(check-duplicates s-lst) (triggered (exception "vars: duplicate identifier"))]
+                    [else (fri (vars-e2 expr) (append env-lst env))]
                 )
             )
-        ]                 
+        ]
+        [(valof? expr)                                                    ;; Najde prvi kljuc v seznamu parov, ki jih imamo v environmentu, in vrne vrednost tega para.
+            (let ([s (assoc (valof-s expr) env)])                         ;; Ce spremenljivka v okolju ne obstaja vrne prozeno izjemo.
+                (if s (fri (cdr s) env) (triggered (exception "valof: undefined variable")))
+            )
+        ]
+        [(fun? expr)                                                      ;; Evalvira funkcijo v funkcijsko ovojnico.
+            (cond                                                         ;; Klic se zgodi sele, ko interpreter dobi 'call' command.
+                [(check-duplicates (fun-farg expr)) (triggered (exception "fun: duplicate argument identifier"))]
+                [else (closure env expr)]
+            )
+        ]
+        [(proc? expr) expr]                                               ;; Vrne proceduro. Klic se zgodi sele, ko interpreter dobi 'call' command.
+        [(call? expr)                                                       
+            (let ([e (fri (call-e expr) env)]
+                  [args (call-args expr)])
+                (cond
+                    [(proc? e) (fri (proc-body e) (cons (cons (proc-name e) e) env))]
+                    [(closure? e) ;; TODO: Optimize.
+                        (let ([name (fun-name (closure-f e))]
+                              [fargs (fun-farg (closure-f e))]
+                              [body (fun-body (closure-f e))])
+                            (fri (vars fargs args body) (cons (cons name (closure-f e)) (closure-env e)))
+                        )
+                    ]
+                    [else (triggered (exception "call: wrong argument type"))]
+                )
+            )
+        ]               
     )
 )
