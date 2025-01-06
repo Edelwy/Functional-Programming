@@ -274,10 +274,10 @@
                 )
             )
         ]
-        [(vars? expr)                                                    ;; Razsiri trenutno okolje z kljuci imen spremenljivk iz 's' ter vrednostmi iz 'e1'. Evalviramo izraz 'e2'.
+        [(vars? expr)                                                    ;; Razsiri okolje z imeni spremenljivk iz 's' ter vrednostmi iz 'e1'. Evalviramo izraz 'e2'.
             (let* ([s (if (list? (vars-s expr)) (vars-s expr) (list (vars-s expr)))]
-                   [e1 (if (list? (vars-e1 expr)) (map (lambda (exp) (fri exp env)) (vars-e1 expr)) (list (fri (vars-e1 expr) env)))]
-                   [errors (memf (lambda (exp) (triggered? exp)) e1)]
+                   [e1 (if (list? (vars-e1 expr)) (map (lambda (x) (fri x env)) (vars-e1 expr)) (list (fri (vars-e1 expr) env)))]
+                   [errors (memf (lambda (x) (triggered? x)) e1)]
                    [envlst (zip s e1)])
                 (cond
                     [errors (list-ref errors 0)]
@@ -315,10 +315,12 @@
                         (let* ([name (fun-name (closure-f e))]
                               [fargs (fun-farg (closure-f e))]
                               [body (fun-body (closure-f e))]
-                              [newenv (zip fargs (map (lambda (exp) (fri exp env)) args))])
+                              [envargs (zip fargs (map (lambda (x) (fri x env)) args))]
+                              [newenv (append envargs (zip name (closure-f e)) (closure-env e))]
+                              [optimizedenv (remove-duplicates newenv (lambda (x y) (equal? (car x) (car y))))])
                             (cond
                                 [(not (equal? (length args) (length fargs))) (triggered (exception "call: arity mismatch"))]
-                                [else (fri body (append newenv (zip name (closure-f e)) (closure-env e)))]
+                                [else (fri body optimizedenv)]
                             )
                         )
                     ]
@@ -326,16 +328,16 @@
                 )
             )
         ]
-        [(triggered (exception "syntax not supported")) ]               
+        [else (triggered (exception "syntax not supported")) ]            ;; Default case za boljse handlanje nedefinirane sintakse. 
     )
 )
 
 ;; Macros.
-(define (greater e1 e2) 
+(define (greater e1 e2)                                                   ;; Vrne true, ce je prvi izraz vecji od drugega.
     (~(?leq e1 e2))
 )
 
-(define (rev seq) (call 
+(define (rev seq) (call                                                   ;; Obrne seznam. 
     (fun "rev-macro" (list "seq")
         (if-then-else 
             (?empty (valof "seq"))
@@ -346,7 +348,7 @@
     (list seq))
 )
 
-(define (remainder e1) (call
+(define (remainder e1) (call                                              ;; Vrne ostanek izraza pri deljenju z 2.
     (fun "remainder-macro" (list "e1")
         (if-then-else 
             (?leq (valof "e1") (int 1))
@@ -358,7 +360,7 @@
 )
 
 
-(define (divisor e1) (call
+(define (divisor e1) (call                                               ;; Vrne delitelja pri celostevilskem deljenju z 2.
     (fun "divisor-macro" (list "e1")
         (if-then-else 
             (?leq (valof "e1") (int 1))
@@ -369,7 +371,7 @@
     (list e1))
 )
  
-(define (binary e1) (rev (call 
+(define (binary e1) (rev (call                                           ;; Vrne seznam, ki predstavlja binarni zapis izraza v parametrih.
     (fun "binary-macro" (list "e1")
         (if-then-else 
             (?int (valof "e1"))
@@ -384,7 +386,7 @@
     (list e1)))
 )
 
-(define (mapping f seq) (call
+(define (mapping f seq) (call                                            ;; Vzame seznam in funkcijo, rezultat je seznam z funkcijo aplicirano na vsak element seznama.
     (fun "mapping-macro" (list "f" "seq")
         (if-then-else 
             (?empty (valof "seq"))
@@ -395,7 +397,7 @@
     (list f seq))
 )
 
-(define (filtering f seq) (call
+(define (filtering f seq) (call                                          ;; Vzame seznam in funkcijo, rezultat je filtriran seznam glede na funkcijo.
     (fun "filtering-macro" (list "f" "seq")
         (if-then-else 
             (?empty (valof "seq"))
@@ -410,8 +412,8 @@
     (list f seq))
 )
 
-(define (folding f acc seq) (call
-    (fun "folding-macro" (list "f" "acc" "seq")
+(define (folding f acc seq) (call                                        ;; Vzame seznam, funkcijo in zacetni element, ter aplicira funkcijo
+    (fun "folding-macro" (list "f" "acc" "seq")                          ;; od znotraj ven na elementa seznama (foldl).
         (if-then-else 
             (?empty (valof "seq"))
             acc
