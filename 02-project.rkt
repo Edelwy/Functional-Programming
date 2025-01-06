@@ -410,6 +410,15 @@
     (list f seq))
 )
 
-;;(fri (mapping (fun "test" (list "arg") (mul (valof "arg") (int 2))) (.. (int 1) (.. (int 2) (.. (int 3) (empty))))) null)
-;;(fri (filtering (fun "test" (list "arg") (?leq (valof "arg") (int 4))) (.. (int 1) (.. (int 2) (.. (int 3) (empty))))) null)
+(define (folding f acc seq) (call
+    (fun "folding-macro" (list "f" "acc" "seq")
+        (if-then-else 
+            (?empty (valof "seq"))
+            acc
+            (call (valof "f") (list (head (valof "seq")) (call (valof "folding-macro") (list (valof "f") (valof "acc") (tail (valof "seq"))))))
+        )
+    )
+    (list f acc seq))
+)
+
 
