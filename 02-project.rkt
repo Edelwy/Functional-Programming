@@ -397,28 +397,6 @@
     (list f seq))
 )
 
-(define (filtering f seq) (call                                          ;; Vzame seznam in funkcijo, rezultat je filtriran seznam glede na funkcijo.
-    (fun "filtering-macro" (list "f" "seq")
-        (if-then-else 
-            (?empty (valof "seq"))
-            (empty)
-            (if-then-else
-                (call (valof "f") (list (head (valof "seq"))))
-                (add (.. (head (valof "seq")) (empty)) (call (valof "filtering-macro") (list (valof "f") (tail (valof "seq")))))
-                (call (valof "filtering-macro") (list (valof "f") (tail (valof "seq"))))
-            )
-        )
-    )
-    (list f seq))
-)
+(define (filtering f seq) (empty))
 
-(define (folding f init seq) (call                                      ;; Vzame seznam, funkcijo in zacetni element, ter aplicira funkcijo
-    (fun "folding-macro" (list "f" "init" "seq")                        ;; od znotraj ven na elementa seznama (foldl).
-        (if-then-else 
-            (?empty (valof "seq"))
-            (valof "init")
-            (call (valof "f") (list (head (valof "seq")) (call (valof "folding-macro") (list (valof "f") (valof "init") (tail (valof "seq"))))))
-        )
-    )
-    (list f init (rev seq)))
-)
+(define (folding f init seq) (empty))
