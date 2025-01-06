@@ -44,23 +44,31 @@
     (cond 
         [(false? value) #t]
         [(true? value) #t]
-        [else #f]))
+        [else #f]
+    )
+)
     
 (define (holds? value)
      (cond 
         [(true? value) #t]
-        [else #f]))
+        [else #f]
+    )
+)
 
 (define (count lst)
     (cond
         [(empty? lst) 0]             
         [(..? lst) (+ 1 (count (..-e2 lst)))] 
-        [else (triggered (exception "count: wrong argument type"))]))
+        [else (triggered (exception "count: wrong argument type"))]
+    )
+)
 
 (define (zip lst1 lst2) 
     (cond 
         [(and (list? lst1) (list? lst2)) (map cons lst1 lst2)]
-        [else (list (cons lst1 lst2))]))
+        [else (list (cons lst1 lst2))]
+    )
+)
 
 ;; FR interpreter funkcija.
 (define (fri expr env)
@@ -170,7 +178,9 @@
                     [(triggered? e2) e2]
                     [(and (bool? e1) (bool? e2)) (if (or (true? e1) (true? e2)) (true) (false))]
                     [(and (int? e1) (int? e2)) (int (+ (int-n e1) (int-n e2)))]
-                    [(and (holds? (fri (?seq e1) env)) (holds? (fri (?seq e2) env))) (if (empty? e1) e2 (.. e1 e2))]
+                    [(and (holds? (fri (?seq e1) env)) (holds? (fri (?seq e2) env))) 
+                        (if (empty? e1) e2 (.. (fri (head e1) env) (fri (add (tail e1) e2) env)))
+                    ]
                     [else (triggered (exception "add: wrong argument type"))]
                 )
             )
@@ -264,7 +274,7 @@
                 )
             )
         ]
-        [(vars? expr)                                                    
+        [(vars? expr)                                                    ;; Razsiri trenutno okolje z kljuci imen spremenljivk iz 's' ter vrednostmi iz 'e1'. Evalviramo izraz 'e2'.
             (let* ([s-lst (if (list? (vars-s expr)) (vars-s expr) (list (vars-s expr)))]
                   [e1-lst (if (list? (vars-e1 expr)) (map (lambda (exp) (fri exp env)) (vars-e1 expr)) (list (fri (vars-e1 expr) env)))]
                   [env-lst (zip s-lst e1-lst)])
@@ -286,7 +296,7 @@
             )
         ]
         [(proc? expr) expr]                                               ;; Vrne proceduro. Klic se zgodi sele, ko interpreter dobi 'call' command.
-        [(call? expr)                                                       
+        [(call? expr)                                                     ;; Poklice ovojnico ali proceduro, funkcije imajo podane argumente procedure pa ne. 
             (let ([e (fri (call-e expr) env)]
                   [args (call-args expr)])
                 (cond
@@ -304,3 +314,68 @@
         ]               
     )
 )
+
+;; Macros.
+(define (greater e1 e2) 
+    (~(?leq e1 e2))
+)
+
+(define (rev seq) (call 
+    (fun "rev-macro" (list "seq")
+        (if-then-else 
+            (?empty (valof "seq"))
+            (empty)
+            (add (call (valof "rev-macro") (list (tail (valof "seq")))) (.. (head (valof "seq")) (empty)))
+        ) 
+    )
+    (list seq))
+)
+
+(define (remainder e1) (call
+    (fun "remainder-macro" (list "e1")
+        (if-then-else 
+            (?leq (valof "e1") (int 1))
+            (valof "e1")
+            (call (valof "remainder-macro") (list (add (valof "e1") (int -2))))
+        )
+    )
+    (list e1))
+)
+
+
+(define (divisor e1) (call
+    (fun "divisor-macro" (list "e1")
+        (if-then-else 
+            (?leq (valof "e1") (int 1))
+            (int 0)
+            (add (int 1) (call (valof "divisor-macro") (list (add (valof "e1") (int -2)))))
+        )
+    )
+    (list e1))
+)
+ 
+(define (binary e1) (call 
+    (fun "binary-macro" (list "e1")
+        (if-then-else 
+            (?int (valof "e1"))
+            (if-then-else
+                (?= (divisor (valof "e1")) (int 0))
+                (empty)
+                (.. (remainder (valof "e1")) (call (valof "binary-macro") (list (divisor (valof "e1")))))
+            )
+            (trigger (exception "binary: expression not of int type"))
+        ) 
+    )
+    (list e1))
+)
+
+(define (mapping f seq) (false))
+
+(define (filtering f seq) (false))
+
+(define (folding f acc seq) (false))
+
+(fri (rev (.. (int 1) (.. (int 2) (.. (int 3) (empty))))) null)
+(fri (remainder (int 10)) null)
+(fri (binary (int 17)) null)
+
