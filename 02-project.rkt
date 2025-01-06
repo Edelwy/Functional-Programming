@@ -412,15 +412,13 @@
     (list f seq))
 )
 
-(define (folding f acc seq) (call                                        ;; Vzame seznam, funkcijo in zacetni element, ter aplicira funkcijo
-    (fun "folding-macro" (list "f" "acc" "seq")                          ;; od znotraj ven na elementa seznama (foldl).
+(define (folding f init seq) (call                                      ;; Vzame seznam, funkcijo in zacetni element, ter aplicira funkcijo
+    (fun "folding-macro" (list "f" "init" "seq")                        ;; od znotraj ven na elementa seznama (foldl).
         (if-then-else 
             (?empty (valof "seq"))
-            acc
-            (call (valof "f") (list (head (valof "seq")) (call (valof "folding-macro") (list (valof "f") (valof "acc") (tail (valof "seq"))))))
+            (valof "init")
+            (call (valof "f") (list (head (valof "seq")) (call (valof "folding-macro") (list (valof "f") (valof "init") (tail (valof "seq"))))))
         )
     )
-    (list f acc seq))
+    (list f init (rev seq)))
 )
-
-
