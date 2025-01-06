@@ -275,12 +275,14 @@
             )
         ]
         [(vars? expr)                                                    ;; Razsiri trenutno okolje z kljuci imen spremenljivk iz 's' ter vrednostmi iz 'e1'. Evalviramo izraz 'e2'.
-            (let* ([s-lst (if (list? (vars-s expr)) (vars-s expr) (list (vars-s expr)))]
-                  [e1-lst (if (list? (vars-e1 expr)) (map (lambda (exp) (fri exp env)) (vars-e1 expr)) (list (fri (vars-e1 expr) env)))]
-                  [env-lst (zip s-lst e1-lst)])
+            (let* ([s (if (list? (vars-s expr)) (vars-s expr) (list (vars-s expr)))]
+                   [e1 (if (list? (vars-e1 expr)) (map (lambda (exp) (fri exp env)) (vars-e1 expr)) (list (fri (vars-e1 expr) env)))]
+                   [errors (memf (lambda (exp) (triggered? exp)) e1)]
+                   [envlst (zip s e1)])
                 (cond
-                    [(check-duplicates s-lst) (triggered (exception "vars: duplicate identifier"))]
-                    [else (fri (vars-e2 expr) (append env-lst env))]
+                    [errors (list-ref errors 0)]
+                    [(check-duplicates s) (triggered (exception "vars: duplicate identifier"))]
+                    [else (fri (vars-e2 expr) (append envlst env))]
                 )
             )
         ]
@@ -291,27 +293,40 @@
         ]
         [(fun? expr)                                                      ;; Evalvira funkcijo v funkcijsko ovojnico.
             (cond                                                         ;; Klic se zgodi sele, ko interpreter dobi 'call' command.
+                [(triggered? (fun-body expr)) (fun-body expr)]
                 [(check-duplicates (fun-farg expr)) (triggered (exception "fun: duplicate argument identifier"))]
                 [else (closure env expr)]
             )
         ]
-        [(proc? expr) expr]                                               ;; Vrne proceduro. Klic se zgodi sele, ko interpreter dobi 'call' command.
+        [(proc? expr)                                                     ;; Vrne proceduro. Klic se zgodi sele, ko interpreter dobi 'call' command.
+            (cond
+                [(triggered? (proc-body expr)) (proc-body expr)]
+                [else expr]
+            )
+        ]                                               
+        [(closure? expr) expr]                                            ;; Vrne closure. Klic se zgodi sele, ko interpreter dobi 'call' command.
         [(call? expr)                                                     ;; Poklice ovojnico ali proceduro, funkcije imajo podane argumente procedure pa ne. 
             (let ([e (fri (call-e expr) env)]
                   [args (call-args expr)])
                 (cond
+                    [(triggered? e) e]
                     [(proc? e) (fri (proc-body e) (cons (cons (proc-name e) e) env))]
-                    [(closure? e) ;; TODO: Optimize.
-                        (let ([name (fun-name (closure-f e))]
+                    [(closure? e) 
+                        (let* ([name (fun-name (closure-f e))]
                               [fargs (fun-farg (closure-f e))]
-                              [body (fun-body (closure-f e))])
-                            (fri (vars fargs args body) (cons (cons name (closure-f e)) (closure-env e)))
+                              [body (fun-body (closure-f e))]
+                              [newenv (zip fargs (map (lambda (exp) (fri exp env)) args))])
+                            (cond
+                                [(not (equal? (length args) (length fargs))) (triggered (exception "call: arity mismatch"))]
+                                [else (fri body (append newenv (zip name (closure-f e)) (closure-env e)))]
+                            )
                         )
                     ]
                     [else (triggered (exception "call: wrong argument type"))]
                 )
             )
-        ]               
+        ]
+        [(triggered (exception "syntax not supported")) ]               
     )
 )
 
@@ -354,7 +369,7 @@
     (list e1))
 )
  
-(define (binary e1) (call 
+(define (binary e1) (rev (call 
     (fun "binary-macro" (list "e1")
         (if-then-else 
             (?int (valof "e1"))
@@ -366,16 +381,23 @@
             (trigger (exception "binary: expression not of int type"))
         ) 
     )
-    (list e1))
+    (list e1)))
 )
 
-(define (mapping f seq) (false))
+(define (mapping f seq) (call
+    (fun "mapping-macro" (list "f" "seq")
+        (if-then-else 
+            (?empty (valof "seq"))
+            (empty)
+            (.. (call (valof "f") (list (head (valof "seq")))) (call (valof "mapping-macro") (list (valof "f") (tail (valof "seq")))))
+        )
+    )
+    (list f seq))
+)
 
 (define (filtering f seq) (false))
 
 (define (folding f acc seq) (false))
 
-(fri (rev (.. (int 1) (.. (int 2) (.. (int 3) (empty))))) null)
-(fri (remainder (int 10)) null)
-(fri (binary (int 17)) null)
+(fri (mapping (fun "test" (list "arg") (mul (valof "arg") (int 2))) (.. (int 1) (.. (int 2) (.. (int 3) (empty))))) null)
 
