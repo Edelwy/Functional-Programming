@@ -506,8 +506,8 @@
         (if-then-else 
             (?empty (valof "seq"))
             (valof "init")
-            (call (valof "f") (list (head (valof "seq")) (call (valof "folding-macro") (list (valof "f") (valof "init") (tail (valof "seq"))))))
+            (call (valof "folding-macro") (list (valof "f") (call (valof "f") (list (head (valof "seq")) (valof "init"))) (tail (valof "seq"))))
         )
     )
-    (list f init (rev seq)))
+    (list f init seq))
 )
