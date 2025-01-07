@@ -79,6 +79,43 @@
     )
 )
 
+(define (collect-vars expr)
+    (cond
+        [(vars? expr) (append 
+                (if (list? (vars-s expr)) (vars-s expr) (list (vars-s expr)))
+                (collect-vars (vars-e1 expr)) (collect-vars (vars-e2 expr)))]
+        [(add? expr) (append (collect-vars (add-e1 expr)) (collect-vars (add-e2 expr)))]
+        [(mul? expr) (append (collect-vars (mul-e1 expr)) (collect-vars (mul-e2 expr)))]
+        [(?leq? expr) (append (collect-vars (?leq-e1 expr)) (collect-vars (?leq-e2 expr)))]
+        [(?=? expr) (append (collect-vars (?=-e1 expr)) (collect-vars (?=-e2 expr)))]
+        [(handle? expr) (append (collect-vars (handle-e1 expr))
+                                (collect-vars (handle-e2 expr))
+                                (collect-vars (handle-e3 expr)))]
+        [(if-then-else? expr) (append (collect-vars (if-then-else-condition expr))
+                                    (collect-vars (if-then-else-e1 expr))
+                                    (collect-vars (if-then-else-e2 expr)))]
+        [(trigger? expr) (collect-vars (trigger-e expr))]
+        [(?int? expr) (collect-vars (?int-e expr))]
+        [(?bool? expr) (collect-vars (?bool-e expr))]
+        [(?..? expr) (collect-vars (?..-e expr))]
+        [(?seq? expr) (collect-vars (?seq-e expr))]
+        [(?empty? expr) (collect-vars (?empty-e expr))]
+        [(?exception? expr) (collect-vars (?exception-e expr))]
+        [(head? expr) (collect-vars (head-e expr))]
+        [(tail? expr) (collect-vars (tail-e expr))]
+        [(~? expr) (collect-vars (~-e expr))]
+        [(?all? expr) (collect-vars (?all-e expr))]
+        [(?any? expr) (collect-vars (?any-e expr))]
+        [(fun? expr) (collect-vars (fun-body expr))]
+        [(proc? expr) (collect-vars (proc-body expr))]
+        [(closure? expr) (collect-vars (closure-f expr))]
+        [(call? expr) (append (collect-vars (call-e expr))
+                            (apply append (map collect-vars (call-args expr))))]
+        [(list? expr) (apply append (map collect-vars expr))]
+        [else '()]
+    )
+)
+
 ;; FR interpreter funkcija.
 (define (fri expr env)
     ;;(printf "Evaluating: ~a\nEnvironment: ~a\n" expr env)
@@ -301,10 +338,14 @@
             )
         ]
         [(fun? expr)                                                      ;; Evalvira funkcijo v funkcijsko ovojnico.
-            (cond                                                         ;; Klic se zgodi sele, ko interpreter dobi 'call' command.
-                [(triggered? (fun-body expr)) (fun-body expr)]
-                [(check-duplicates (fun-farg expr)) (triggered (exception "fun: duplicate argument identifier"))]
-                [else (closure env expr)]
+            (let* ([var (collect-vars (fun-body expr))]                
+                   [envshw (filter (lambda (x) (and (not (member (car x) var))(not (member (car x) (fun-farg expr))))) env)]
+                   [envopt (remove-duplicates envshw (lambda (x y) (equal? (car x) (car y))))])
+                (cond                                                     
+                    [(triggered? (fun-body expr)) (fun-body expr)]
+                    [(check-duplicates (fun-farg expr)) (triggered (exception "fun: duplicate argument identifier"))]
+                    [else (closure envopt expr)]
+                )
             )
         ]
         [(proc? expr)                                                     ;; Vrne proceduro. Klic se zgodi sele, ko interpreter dobi 'call' command.
@@ -313,7 +354,7 @@
                 [else expr]
             )
         ]                                               
-        [(closure? expr) expr]                                            ;; Vrne closure. Klic se zgodi sele, ko interpreter dobi 'call' command.
+        [(closure? expr) expr]                                                ;; Vrne closure. Klic se zgodi sele, ko interpreter dobi 'call' command.                                            
         [(call? expr)                                                     ;; Poklice ovojnico ali proceduro, funkcije imajo podane argumente procedure pa ne. 
             (let ([e (fri (call-e expr) env)]
                   [args (call-args expr)])
