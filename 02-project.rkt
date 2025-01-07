@@ -1,5 +1,14 @@
 #lang racket
 
+(provide false true int .. empty exception
+         trigger triggered handle
+         if-then-else
+         ?int ?bool ?.. ?seq ?empty ?exception
+         add mul ?leq ?= head tail ~ ?all ?any
+         vars valof fun proc closure call
+         greater rev binary filtering folding mapping
+         fri)
+
 ;; Podatkovni tipi.
 (struct int (n) #:transparent)
 (struct true () #:transparent)
@@ -256,7 +265,7 @@
             (let ([e (fri (?all-e expr) env)])
                 (cond
                     [(triggered? e) e]
-                    [(not (holds? (fri (?seq e) env))) (triggered (exception "all: wrong argument type"))]
+                    [(not (holds? (fri (?seq e) env))) (triggered (exception "?all: wrong argument type"))]
                     [(empty? e) (true)]
                     [(holds? (fri (?= (..-e1 e) (false)) env)) (false)]
                     [(fri (?all (..-e2 e)) env)]
@@ -267,7 +276,7 @@
             (let ([e (fri (?any-e expr) env)])
                 (cond
                     [(triggered? e) e]
-                    [(not (holds? (fri (?seq e) env))) (triggered (exception "any: wrong argument type"))]
+                    [(not (holds? (fri (?seq e) env))) (triggered (exception "?any: wrong argument type"))]
                     [(empty? e) (false)]
                     [(not (holds? (fri (?= (..-e1 e) (false)) env))) (true)]
                     [(fri (?any (..-e2 e)) env)]
@@ -281,7 +290,7 @@
                    [envlst (zip s e1)])
                 (cond
                     [errors (list-ref errors 0)]
-                    [(check-duplicates s) (triggered (exception "vars: duplicate identifier"))]
+                    ;;[(check-duplicates s) (triggered (exception "vars: duplicate identifier"))]
                     [else (fri (vars-e2 expr) (append envlst env))]
                 )
             )
@@ -310,17 +319,20 @@
                   [args (call-args expr)])
                 (cond
                     [(triggered? e) e]
-                    [(proc? e) (fri (proc-body e) (cons (cons (proc-name e) e) env))]
+                    [(proc? e) 
+                        (cond
+                            [(not (equal? (length args) 0)) (triggered (exception "call: arity mismatch"))]
+                            [else (fri (proc-body e) (cons (cons (proc-name e) e) env))]
+                        )   
+                    ]
                     [(closure? e) 
                         (let* ([name (fun-name (closure-f e))]
                               [fargs (fun-farg (closure-f e))]
                               [body (fun-body (closure-f e))]
-                              [envargs (zip fargs (map (lambda (x) (fri x env)) args))]
-                              [newenv (append envargs (zip name (closure-f e)) (closure-env e))]
-                              [optimizedenv (remove-duplicates newenv (lambda (x y) (equal? (car x) (car y))))])
+                              [argseval (map (lambda (x) (fri x env)) args)])
                             (cond
                                 [(not (equal? (length args) (length fargs))) (triggered (exception "call: arity mismatch"))]
-                                [else (fri body optimizedenv)]
+                                [else (fri (vars (append fargs (list name)) (append argseval (list e)) body) (closure-env e))]
                             )
                         )
                     ]
@@ -377,7 +389,7 @@
             (?int (valof "e1"))
             (if-then-else
                 (?= (divisor (valof "e1")) (int 0))
-                (empty)
+                (.. (int 1) (empty))
                 (.. (remainder (valof "e1")) (call (valof "binary-macro") (list (divisor (valof "e1")))))
             )
             (trigger (exception "binary: expression not of int type"))
@@ -397,6 +409,28 @@
     (list f seq))
 )
 
-(define (filtering f seq) (empty))
+(define (filtering f seq) (call                                          ;; Vzame seznam in funkcijo, rezultat je filtriran seznam glede na funkcijo.
+    (fun "filtering-macro" (list "f" "seq")
+        (if-then-else 
+            (?empty (valof "seq"))
+            (empty)
+            (if-then-else
+                (call (valof "f") (list (head (valof "seq"))))
+                (.. (head (valof "seq")) (call (valof "filtering-macro") (list (valof "f") (tail (valof "seq")))))
+                (call (valof "filtering-macro") (list (valof "f") (tail (valof "seq"))))
+            )
+        )
+    )
+    (list f seq))
+)
 
-(define (folding f init seq) (empty))
+(define (folding f init seq) (call                                      ;; Vzame seznam, funkcijo in zacetni element, ter aplicira funkcijo
+    (fun "folding-macro" (list "f" "init" "seq")                        ;; od znotraj ven na elementa seznama (foldl).
+        (if-then-else 
+            (?empty (valof "seq"))
+            (valof "init")
+            (call (valof "f") (list (head (valof "seq")) (call (valof "folding-macro") (list (valof "f") (valof "init") (tail (valof "seq"))))))
+        )
+    )
+    (list f init (rev seq)))
+)
