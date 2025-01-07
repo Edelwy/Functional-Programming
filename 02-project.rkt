@@ -116,6 +116,41 @@
     )
 )
 
+(define (collect-valof expr)
+  (cond
+    [(valof? expr) (list (valof-s expr))]
+    [(add? expr) (append (collect-valof (add-e1 expr)) (collect-valof (add-e2 expr)))]
+    [(mul? expr) (append (collect-valof (mul-e1 expr)) (collect-valof (mul-e2 expr)))]
+    [(?leq? expr) (append (collect-valof (?leq-e1 expr)) (collect-valof (?leq-e2 expr)))]
+    [(?=? expr) (append (collect-valof (?=-e1 expr)) (collect-valof (?=-e2 expr)))]
+    [(handle? expr) (append (collect-valof (handle-e1 expr))
+                            (collect-valof (handle-e2 expr))
+                            (collect-valof (handle-e3 expr)))]
+    [(if-then-else? expr) (append (collect-valof (if-then-else-condition expr))
+                                  (collect-valof (if-then-else-e1 expr))
+                                  (collect-valof (if-then-else-e2 expr)))]
+    [(trigger? expr) (collect-valof (trigger-e expr))]
+    [(?int? expr) (collect-valof (?int-e expr))]
+    [(?bool? expr) (collect-valof (?bool-e expr))]
+    [(?..? expr) (collect-valof (?..-e expr))]
+    [(?seq? expr) (collect-valof (?seq-e expr))]
+    [(?empty? expr) (collect-valof (?empty-e expr))]
+    [(?exception? expr) (collect-valof (?exception-e expr))]
+    [(head? expr) (collect-valof (head-e expr))]
+    [(tail? expr) (collect-valof (tail-e expr))]
+    [(~? expr) (collect-valof (~-e expr))]
+    [(?all? expr) (collect-valof (?all-e expr))]
+    [(?any? expr) (collect-valof (?any-e expr))]
+    [(fun? expr) (collect-valof (fun-body expr))]
+    [(proc? expr) (collect-valof (proc-body expr))]
+    [(closure? expr) (collect-valof (closure-f expr))]
+    [(call? expr) (append (collect-valof (call-e expr))
+                          (apply append (map collect-valof (call-args expr))))]
+    [(vars? expr) (append (collect-valof (vars-e1 expr))
+                          (collect-valof (vars-e2 expr)))]
+    [(list? expr) (apply append (map collect-valof expr))]
+    [else '()]))
+
 ;; FR interpreter funkcija.
 (define (fri expr env)
     ;;(printf "Evaluating: ~a\nEnvironment: ~a\n" expr env)
@@ -340,7 +375,8 @@
         [(fun? expr)                                                      ;; Evalvira funkcijo v funkcijsko ovojnico.
             (let* ([var (collect-vars (fun-body expr))]                
                    [envshw (filter (lambda (x) (and (not (member (car x) var))(not (member (car x) (fun-farg expr))))) env)]
-                   [envopt (remove-duplicates envshw (lambda (x y) (equal? (car x) (car y))))])
+                   [envrem (remove-duplicates envshw (lambda (x y) (equal? (car x) (car y))))]
+                   [envopt (filter (lambda (x) (member (car x) (collect-valof (fun-body expr)))) envrem)])
                 (cond                                                     
                     [(triggered? (fun-body expr)) (fun-body expr)]
                     [(check-duplicates (fun-farg expr)) (triggered (exception "fun: duplicate argument identifier"))]
